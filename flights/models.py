@@ -1,3 +1,4 @@
+from django.core.validators import MinValueValidator
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils.timezone import now
@@ -5,10 +6,10 @@ from rest_framework.exceptions import ValidationError
 
 
 class Country(models.Model):
-    name = models.CharField(max_length=100)
+    country = models.CharField(max_length=100)
 
     def __str__(self):
-        return self.name
+        return self.country
 
 
 class City(models.Model):
@@ -16,7 +17,7 @@ class City(models.Model):
     country = models.ForeignKey(Country, on_delete=models.CASCADE)
 
     def __str__(self):
-        return f"{self.name}, {self.country.name}"
+        return f"{self.name}, {self.country}"
 
 
 class Airport(models.Model):
@@ -34,7 +35,7 @@ class Route(models.Model):
     destination = models.ForeignKey(
         Airport, related_name="routes_to", on_delete=models.CASCADE
     )
-    distance = models.PositiveIntegerField()
+    distance = models.PositiveIntegerField(validators=[MinValueValidator(1)])
 
     def clean(self):
         if self.source == self.destination:
@@ -160,6 +161,12 @@ class Ticket(models.Model):
     class Meta:
         unique_together = ("row", "seat", "flight")
 
+    @staticmethod
+    def validate_seat(seat, order, error_class):
+        if Ticket.objects.filter(seat=seat).exists():
+            raise ValidationError(f"Seat {seat} already reserved")
+
+
     def get_price(self):
         return self.base_price * self.ticket_class.price_multiplier
 
@@ -200,6 +207,23 @@ class Seat(models.Model):
 
     class Meta:
         unique_together = ("flight", "row", "seat_number")
+
+    def clean(self):
+        airplane = self.flight.airplane
+
+        if self.row > airplane.row:
+            raise ValidationError(f"Row {self.row} is greater than Airplane {self.row}")
+        if self.seat_number > airplane.seats_in_row:
+            raise ValidationError(f"Seat number {self.seat_number} exceeds seats per row ({airplane.seats_in_row})")
+        if self.is_window and self.seat_number not in(1, airplane.seats_in_row):
+            raise ValidationError(f"Seat number {self.seat_number} is invalid")
+        if self.is_aisle and self.seat_number not in [1, airplane.seats_in_row]:
+            raise ValidationError(f"Seat number {self.seat_number} is invalid")
+
+    def save(self, *args, **kwargs):
+        self.clean()
+        super().save(*args, **kwargs)
+
 
     def __str__(self):
         return f"Row {self.row} Seat {self.seat_number} on Flight {self.flight.id}"
@@ -263,7 +287,7 @@ class OrderHistory(models.Model):
 class Review(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
-    rating = models.PositiveIntegerField()  # 1-5
+    rating = models.PositiveIntegerField()
     comment = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -274,7 +298,7 @@ class Review(models.Model):
 class Airline(models.Model):
     name = models.CharField(max_length=100)
     country = models.ForeignKey(Country, on_delete=models.CASCADE)
-    iata_code = models.CharField(max_length=5, unique=True)
+    iata_code = models.CharField(max_length=3, unique=True)
 
     def __str__(self):
         return self.name
@@ -298,3 +322,5 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"Notification for {self.user.username}"
+
+
