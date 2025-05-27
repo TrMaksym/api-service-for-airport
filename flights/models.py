@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.validators import MinValueValidator
 from django.db import models
 from django.contrib.auth.models import User
@@ -126,7 +127,7 @@ class Flight(models.Model):
 
 class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
 
     def total_price(self):
         tickets_price = sum(ticket.get_price() for ticket in self.tickets.all())
@@ -134,7 +135,7 @@ class Order(models.Model):
         return tickets_price + services_price
 
     def __str__(self):
-        return f"Order {self.id} by {self.user.username}"
+        return f"Order {self.id} by {self.user}"
 
 
 class TicketClass(models.Model):
@@ -159,13 +160,15 @@ class Ticket(models.Model):
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default="reserved")
 
     class Meta:
-        unique_together = ("row", "seat", "flight")
+        unique_together = (
+            "status",
+            "seat",
+        )
 
     @staticmethod
     def validate_seat(seat, order, error_class):
         if Ticket.objects.filter(seat=seat).exists():
             raise ValidationError(f"Seat {seat} already reserved")
-
 
     def get_price(self):
         return self.base_price * self.ticket_class.price_multiplier
@@ -189,12 +192,12 @@ class Promotion(models.Model):
 
 
 class Passenger(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     phone = models.CharField(max_length=20, blank=True, null=True)
     passport_number = models.CharField(max_length=50, blank=True, null=True)
 
     def __str__(self):
-        return f"{self.user.username}"
+        return f"{self.user}"
 
 
 class Seat(models.Model):
@@ -211,11 +214,13 @@ class Seat(models.Model):
     def clean(self):
         airplane = self.flight.airplane
 
-        if self.row > airplane.row:
-            raise ValidationError(f"Row {self.row} is greater than Airplane {self.row}")
+        if self.row > airplane.rows:
+            raise ValidationError(f"Row {self.row} is greater than Airplane rows ({airplane.rows})")
         if self.seat_number > airplane.seats_in_row:
-            raise ValidationError(f"Seat number {self.seat_number} exceeds seats per row ({airplane.seats_in_row})")
-        if self.is_window and self.seat_number not in(1, airplane.seats_in_row):
+            raise ValidationError(
+                f"Seat number {self.seat_number} exceeds seats per row ({airplane.seats_in_row})"
+            )
+        if self.is_window and self.seat_number not in (1, airplane.seats_in_row):
             raise ValidationError(f"Seat number {self.seat_number} is invalid")
         if self.is_aisle and self.seat_number not in [1, airplane.seats_in_row]:
             raise ValidationError(f"Seat number {self.seat_number} is invalid")
@@ -224,9 +229,9 @@ class Seat(models.Model):
         self.clean()
         super().save(*args, **kwargs)
 
-
     def __str__(self):
         return f"Row {self.row} Seat {self.seat_number} on Flight {self.flight.id}"
+
 
 
 class Payment(models.Model):
@@ -262,7 +267,10 @@ class FlightHistory(models.Model):
     )
     changed_at = models.DateTimeField(auto_now_add=True)
     changed_by = models.ForeignKey(
-        User, null=True, blank=True, on_delete=models.SET_NULL
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
     )
     change_description = models.TextField()
 
@@ -276,7 +284,7 @@ class OrderHistory(models.Model):
     )
     changed_at = models.DateTimeField(auto_now_add=True)
     changed_by = models.ForeignKey(
-        User, null=True, blank=True, on_delete=models.SET_NULL
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL
     )
     change_description = models.TextField()
 
@@ -285,14 +293,14 @@ class OrderHistory(models.Model):
 
 
 class Review(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
     rating = models.PositiveIntegerField()
     comment = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Review by {self.user.username} for Flight {self.flight.id}"
+        return f"Review by {self.user} for Flight {self.flight.id}"
 
 
 class Airline(models.Model):
@@ -315,12 +323,10 @@ class RefundPolicy(models.Model):
 
 
 class Notification(models.Model):
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     message = models.TextField()
     created_at = models.DateTimeField(auto_now_add=True)
     read = models.BooleanField(default=False)
 
     def __str__(self):
-        return f"Notification for {self.user.username}"
-
-
+        return f"Notification for {self.user}"

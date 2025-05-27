@@ -2,9 +2,28 @@ from django.db import transaction
 from rest_framework import serializers
 from rest_framework.validators import UniqueTogetherValidator
 from flights.models import (
-    TicketClass, Ticket, Order, Crew, Flight, Airplane, AirplaneType, Route, Airport, City, Country,
-    Promotion, Passenger, Seat, Payment, ExtraService, FlightHistory, OrderHistory, Review, Airline,
-    RefundPolicy, Notification
+    TicketClass,
+    Ticket,
+    Order,
+    Crew,
+    Flight,
+    Airplane,
+    AirplaneType,
+    Route,
+    Airport,
+    City,
+    Country,
+    Promotion,
+    Passenger,
+    Seat,
+    Payment,
+    ExtraService,
+    FlightHistory,
+    OrderHistory,
+    Review,
+    Airline,
+    RefundPolicy,
+    Notification,
 )
 
 
@@ -12,9 +31,7 @@ class CountrySerializer(serializers.ModelSerializer):
     class Meta:
         model = Country
         fields = ("id", "country")
-        extra_kwargs = {
-            "country": {"help_text": "Name of the country"}
-        }
+        extra_kwargs = {"country": {"help_text": "Name of the country"}}
 
 
 class CitySerializer(serializers.ModelSerializer):
@@ -23,7 +40,7 @@ class CitySerializer(serializers.ModelSerializer):
         fields = ("id", "name", "country")
         extra_kwargs = {
             "name": {"help_text": "Name of the city"},
-            "country": {"help_text": "Country where the city is located"}
+            "country": {"help_text": "Country where the city is located"},
         }
 
 
@@ -38,7 +55,7 @@ class AirportSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "iata_code", "city", "city_id")
         extra_kwargs = {
             "name": {"help_text": "Airport name"},
-            "iata_code": {"help_text": "IATA code of the airport"}
+            "iata_code": {"help_text": "IATA code of the airport"},
         }
 
 
@@ -50,7 +67,7 @@ class AirportListSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "iata_code", "city")
         extra_kwargs = {
             "name": {"help_text": "Airport name"},
-            "iata_code": {"help_text": "IATA code of the airport"}
+            "iata_code": {"help_text": "IATA code of the airport"},
         }
 
 
@@ -62,7 +79,7 @@ class AirportRetrieveSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "iata_code", "city")
         extra_kwargs = {
             "name": {"help_text": "Airport name"},
-            "iata_code": {"help_text": "IATA code of the airport"}
+            "iata_code": {"help_text": "IATA code of the airport"},
         }
 
 
@@ -76,7 +93,9 @@ class AirportFilterSerializer(serializers.Serializer):
 
     def validate(self, data):
         if not any(data.get(field) for field in ["city", "name", "iata_code"]):
-            raise serializers.ValidationError("At least one filter (city, name, or iata_code) must be provided.")
+            raise serializers.ValidationError(
+                "At least one filter (city, name, or iata_code) must be provided."
+            )
         return data
 
 
@@ -92,14 +111,25 @@ class RouteSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Route
-        fields = ("id", "source", "destination", "source_id", "destination_id", "distance")
+        fields = (
+            "id",
+            "source",
+            "destination",
+            "source_id",
+            "destination_id",
+            "distance",
+        )
         extra_kwargs = {
-            "distance": {"help_text": "Distance between source and destination in kilometers"}
+            "distance": {
+                "help_text": "Distance between source and destination in kilometers"
+            }
         }
 
     def validate(self, data):
         if data.get("source") == data.get("destination"):
-            raise serializers.ValidationError("Source and destination airports must be different.")
+            raise serializers.ValidationError(
+                "Source and destination airports must be different."
+            )
         return data
 
 
@@ -111,7 +141,9 @@ class RouteListSerializer(serializers.ModelSerializer):
         model = Route
         fields = ("id", "source", "destination", "distance")
         extra_kwargs = {
-            "distance": {"help_text": "Distance between source and destination in kilometers"}
+            "distance": {
+                "help_text": "Distance between source and destination in kilometers"
+            }
         }
 
 
@@ -123,7 +155,9 @@ class RouteRetrieveSerializer(serializers.ModelSerializer):
         model = Route
         fields = ("id", "source", "destination", "distance")
         extra_kwargs = {
-            "distance": {"help_text": "Distance between source and destination in kilometers"}
+            "distance": {
+                "help_text": "Distance between source and destination in kilometers"
+            }
         }
 
 
@@ -137,10 +171,18 @@ class RouteFilterSerializer(serializers.Serializer):
         fields = ("source_city", "destination_city", "min_distance", "max_distance")
 
     def validate(self, data):
-        if data.get("min_distance") and data.get("max_distance") and data["min_distance"] > data["max_distance"]:
-            raise serializers.ValidationError("min_distance must be less than or equal to max_distance.")
+        if (
+            data.get("min_distance")
+            and data.get("max_distance")
+            and data["min_distance"] > data["max_distance"]
+        ):
+            raise serializers.ValidationError(
+                "min_distance must be less than or equal to max_distance."
+            )
         if data.get("source_city") == data.get("destination_city"):
-            raise serializers.ValidationError("Source and destination cities must be different.")
+            raise serializers.ValidationError(
+                "Source and destination cities must be different."
+            )
         return data
 
 
@@ -148,9 +190,7 @@ class AirplaneTypeSerializer(serializers.ModelSerializer):
     class Meta:
         model = AirplaneType
         fields = ("id", "name")
-        extra_kwargs = {
-            "name": {"help_text": "Type of the airplane"}
-        }
+        extra_kwargs = {"name": {"help_text": "Type of the airplane"}}
 
 
 class AirplaneSerializer(serializers.ModelSerializer):
@@ -161,11 +201,18 @@ class AirplaneSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Airplane
-        fields = ("id", "name", "rows", "seats_in_row", "airplane_type", "airplane_type_id")
+        fields = (
+            "id",
+            "name",
+            "rows",
+            "seats_in_row",
+            "airplane_type",
+            "airplane_type_id",
+        )
         extra_kwargs = {
             "name": {"help_text": "Airplane model name"},
             "rows": {"help_text": "Number of rows in airplane"},
-            "seats_in_row": {"help_text": "Number of seats in each row"}
+            "seats_in_row": {"help_text": "Number of seats in each row"},
         }
 
 
@@ -178,7 +225,7 @@ class AirplaneListSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "name": {"help_text": "Airplane model name"},
             "rows": {"help_text": "Number of rows in airplane"},
-            "seats_in_row": {"help_text": "Number of seats in each row"}
+            "seats_in_row": {"help_text": "Number of seats in each row"},
         }
 
 
@@ -191,7 +238,7 @@ class AirplaneRetrieveSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "name": {"help_text": "Airplane model name"},
             "rows": {"help_text": "Number of rows in airplane"},
-            "seats_in_row": {"help_text": "Number of seats in each row"}
+            "seats_in_row": {"help_text": "Number of seats in each row"},
         }
 
 
@@ -201,7 +248,7 @@ class CrewSerializer(serializers.ModelSerializer):
         fields = ("id", "first_name", "last_name")
         extra_kwargs = {
             "first_name": {"help_text": "Crew member first name"},
-            "last_name": {"help_text": "Crew member last name"}
+            "last_name": {"help_text": "Crew member last name"},
         }
 
 
@@ -211,9 +258,7 @@ class CrewListSerializer(serializers.ModelSerializer):
     class Meta:
         model = Crew
         fields = ("id", "full_name")
-        extra_kwargs = {
-            "full_name": {"help_text": "Full name of the crew member"}
-        }
+        extra_kwargs = {"full_name": {"help_text": "Full name of the crew member"}}
 
     @staticmethod
     def get_full_name(obj):
@@ -226,7 +271,7 @@ class CrewRetrieveSerializer(serializers.ModelSerializer):
         fields = ("id", "first_name", "last_name")
         extra_kwargs = {
             "first_name": {"help_text": "Crew member first name"},
-            "last_name": {"help_text": "Crew member last name"}
+            "last_name": {"help_text": "Crew member last name"},
         }
 
 
@@ -235,20 +280,30 @@ class FlightSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Flight
-        fields = ("id", "route", "airplane", "departure_time", "arrival_time", "crew", "status")
+        fields = (
+            "id",
+            "route",
+            "airplane",
+            "departure_time",
+            "arrival_time",
+            "crew",
+            "status",
+        )
         extra_kwargs = {
             "route": {"help_text": "Route of the flight"},
             "airplane": {"help_text": "Airplane used for the flight"},
             "departure_time": {"help_text": "Departure time of the flight"},
             "arrival_time": {"help_text": "Arrival time of the flight"},
-            "status": {"help_text": "Current status of the flight"}
+            "status": {"help_text": "Current status of the flight"},
         }
 
     def validate(self, data):
         departure = data.get("departure_time")
         arrival = data.get("arrival_time")
         if departure and arrival and departure >= arrival:
-            raise serializers.ValidationError("Departure time must be before arrival time.")
+            raise serializers.ValidationError(
+                "Departure time must be before arrival time."
+            )
         return data
 
     def create(self, validated_data):
@@ -272,7 +327,9 @@ class FlightSerializer(serializers.ModelSerializer):
 class FlightListSerializer(serializers.ModelSerializer):
     route = serializers.SlugRelatedField(read_only=True, slug_field="id")
     airplane = serializers.SlugRelatedField(read_only=True, slug_field="name")
-    crew = serializers.SlugRelatedField(many=True, read_only=True, slug_field="last_name")
+    crew = serializers.SlugRelatedField(
+        many=True, read_only=True, slug_field="last_name"
+    )
     departure_time = serializers.DateTimeField(format="%d %b %Y, %H:%M")
     arrival_time = serializers.DateTimeField(format="%d %b %Y, %H:%M")
     status = serializers.CharField(source="get_status_display", read_only=True)
@@ -280,7 +337,16 @@ class FlightListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Flight
-        fields = ("id", "route", "airplane", "departure_time", "arrival_time", "duration", "status", "crew")
+        fields = (
+            "id",
+            "route",
+            "airplane",
+            "departure_time",
+            "arrival_time",
+            "duration",
+            "status",
+            "crew",
+        )
 
     @staticmethod
     def get_duration(obj):
@@ -297,7 +363,17 @@ class FlightRetrieveSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Flight
-        fields = ("id", "route", "airplane", "departure_time", "arrival_time", "duration", "crew", "status", "available_seats")
+        fields = (
+            "id",
+            "route",
+            "airplane",
+            "departure_time",
+            "arrival_time",
+            "duration",
+            "crew",
+            "status",
+            "available_seats",
+        )
 
     @staticmethod
     def get_duration(obj):
@@ -319,27 +395,48 @@ class FlightFilterSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=Flight.STATUS_CHOICES, required=False)
 
     class Meta:
-        fields = ("departure_time_after", "departure_time_before", "source_city", "destination_city", "status")
+        fields = (
+            "departure_time_after",
+            "departure_time_before",
+            "source_city",
+            "destination_city",
+            "status",
+        )
 
     def validate(self, data):
         if data.get("departure_time_after") and data.get("departure_time_before"):
             if data["departure_time_after"] > data["departure_time_before"]:
-                raise serializers.ValidationError("departure_time_after must be earlier than departure_time_before.")
+                raise serializers.ValidationError(
+                    "departure_time_after must be earlier than departure_time_before."
+                )
         if data.get("source_city") == data.get("destination_city"):
-            raise serializers.ValidationError("Source and destination cities must be different.")
+            raise serializers.ValidationError(
+                "Source and destination cities must be different."
+            )
         return data
 
 
 class TicketSerializer(serializers.ModelSerializer):
     seat = serializers.PrimaryKeyRelatedField(queryset=Seat.objects.all())
-    ticket_class = serializers.PrimaryKeyRelatedField(queryset=TicketClass.objects.all())
+    ticket_class = serializers.PrimaryKeyRelatedField(
+        queryset=TicketClass.objects.all()
+    )
     seat_number = serializers.ReadOnlyField(source="seat.seat_number")
     row = serializers.ReadOnlyField(source="seat.row")
     status = serializers.ChoiceField(choices=Ticket.STATUS_CHOICES, default="reserved")
 
     class Meta:
         model = Ticket
-        fields = ("id", "order", "seat", "ticket_class", "seat_number", "row", "base_price", "status")
+        fields = (
+            "id",
+            "order",
+            "seat",
+            "ticket_class",
+            "seat_number",
+            "row",
+            "base_price",
+            "status",
+        )
         validators = [
             UniqueTogetherValidator(
                 queryset=Ticket.objects.all(),
@@ -368,18 +465,38 @@ class TicketListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Ticket
-        fields = ("id", "order", "seat_number", "row", "ticket_class", "base_price", "status")
+        fields = (
+            "id",
+            "order",
+            "seat_number",
+            "row",
+            "ticket_class",
+            "base_price",
+            "status",
+        )
 
 
 class TicketRetrieveSerializer(TicketSerializer):
     order = serializers.SlugRelatedField(read_only=True, slug_field="id")
     ticket_class = serializers.SlugRelatedField(read_only=True, slug_field="name")
-    flight = serializers.SlugRelatedField(read_only=True, slug_field="id", source="seat.flight")
+    flight = serializers.SlugRelatedField(
+        read_only=True, slug_field="id", source="seat.flight"
+    )
     status = serializers.CharField(source="get_status_display", read_only=True)
 
     class Meta:
         model = Ticket
-        fields = ("id", "order", "seat", "ticket_class", "seat_number", "row", "base_price", "status", "flight")
+        fields = (
+            "id",
+            "order",
+            "seat",
+            "ticket_class",
+            "seat_number",
+            "row",
+            "base_price",
+            "status",
+            "flight",
+        )
 
 
 class OrderSerializer(serializers.ModelSerializer):
@@ -391,7 +508,7 @@ class OrderSerializer(serializers.ModelSerializer):
         fields = ("id", "created_at", "user", "tickets", "tickets_info")
         extra_kwargs = {
             "created_at": {"help_text": "Order creation timestamp"},
-            "user": {"help_text": "User who created the order"}
+            "user": {"help_text": "User who created the order"},
         }
 
     def create(self, validated_data):
@@ -427,7 +544,7 @@ class TicketClassSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "price_multiplier")
         extra_kwargs = {
             "name": {"help_text": "Name of the ticket class (e.g., Economy, Business)"},
-            "price_multiplier": {"help_text": "Price multiplier for the ticket class"}
+            "price_multiplier": {"help_text": "Price multiplier for the ticket class"},
         }
 
 
@@ -436,12 +553,19 @@ class PromotionSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Promotion
-        fields = ("id", "name", "discount_percent", "start_date", "end_date", "is_active")
+        fields = (
+            "id",
+            "name",
+            "discount_percent",
+            "start_date",
+            "end_date",
+            "is_active",
+        )
         extra_kwargs = {
             "name": {"help_text": "Name of the promotion"},
             "discount_percent": {"help_text": "Discount percentage"},
             "start_date": {"help_text": "Start date of the promotion"},
-            "end_date": {"help_text": "End date of the promotion"}
+            "end_date": {"help_text": "End date of the promotion"},
         }
 
     @staticmethod
@@ -455,20 +579,28 @@ class PassengerSerializer(serializers.ModelSerializer):
         fields = ("id", "user", "phone", "passport_number")
         extra_kwargs = {
             "phone": {"help_text": "Passenger's phone number"},
-            "passport_number": {"help_text": "Passenger's passport number"}
+            "passport_number": {"help_text": "Passenger's passport number"},
         }
 
 
 class SeatSerializer(serializers.ModelSerializer):
     class Meta:
         model = Seat
-        fields = ("id", "flight", "row", "seat_number", "is_window", "is_aisle", "is_available")
+        fields = (
+            "id",
+            "flight",
+            "row",
+            "seat_number",
+            "is_window",
+            "is_aisle",
+            "is_available",
+        )
         extra_kwargs = {
             "row": {"help_text": "Row number of the seat"},
             "seat_number": {"help_text": "Seat number in the row"},
             "is_window": {"help_text": "Indicates if the seat is by the window"},
             "is_aisle": {"help_text": "Indicates if the seat is by the aisle"},
-            "is_available": {"help_text": "Indicates if the seat is available"}
+            "is_available": {"help_text": "Indicates if the seat is available"},
         }
 
     def validate(self, data):
@@ -481,14 +613,19 @@ class SeatSerializer(serializers.ModelSerializer):
         airplane = flight.airplane
 
         if row > airplane.rows:
-            raise serializers.ValidationError(f"Row number {row} exceeds total rows in airplane ({airplane.rows})")
+            raise serializers.ValidationError(
+                f"Row number {row} exceeds total rows in airplane ({airplane.rows})"
+            )
 
         if seat_number > airplane.seats_in_row:
             raise serializers.ValidationError(
-                f"Seat number {seat_number} exceeds seats per row ({airplane.seats_in_row})")
+                f"Seat number {seat_number} exceeds seats per row ({airplane.seats_in_row})"
+            )
 
         if is_window and seat_number not in (1, airplane.seats_in_row):
-            raise serializers.ValidationError("Only first or last seats in a row can be window seats.")
+            raise serializers.ValidationError(
+                "Only first or last seats in a row can be window seats."
+            )
 
         if is_aisle and seat_number in (1, airplane.seats_in_row):
             raise serializers.ValidationError("Window seats cannot be aisle seats.")
@@ -505,7 +642,7 @@ class PaymentSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "amount": {"help_text": "Payment amount"},
             "payment_date": {"help_text": "Date of the payment"},
-            "status": {"help_text": "Payment status (e.g., Pending, Successful)"}
+            "status": {"help_text": "Payment status (e.g., Pending, Successful)"},
         }
 
 
@@ -515,7 +652,7 @@ class ExtraServiceSerializer(serializers.ModelSerializer):
         fields = ("id", "order", "name", "price")
         extra_kwargs = {
             "name": {"help_text": "Name of the extra service"},
-            "price": {"help_text": "Price of the extra service"}
+            "price": {"help_text": "Price of the extra service"},
         }
 
 
@@ -525,7 +662,9 @@ class FlightHistorySerializer(serializers.ModelSerializer):
         fields = ("id", "flight", "changed_at", "changed_by", "change_description")
         read_only_fields = ("changed_at", "changed_by")
         extra_kwargs = {
-            "change_description": {"help_text": "Description of the change made to the flight"}
+            "change_description": {
+                "help_text": "Description of the change made to the flight"
+            }
         }
 
     def create(self, validated_data):
@@ -533,7 +672,9 @@ class FlightHistorySerializer(serializers.ModelSerializer):
         if request and hasattr(request, "user") and request.user.is_authenticated:
             validated_data["changed_by"] = request.user
         else:
-            raise serializers.ValidationError("Users must be authenticated for creating flight history.")
+            raise serializers.ValidationError(
+                "Users must be authenticated for creating flight history."
+            )
         return super().create(validated_data)
 
 
@@ -543,7 +684,9 @@ class OrderHistorySerializer(serializers.ModelSerializer):
         fields = ("id", "order", "changed_at", "changed_by", "change_description")
         read_only_fields = ("changed_at", "changed_by")
         extra_kwargs = {
-            "change_description": {"help_text": "Description of the change made to the order"}
+            "change_description": {
+                "help_text": "Description of the change made to the order"
+            }
         }
 
     def create(self, validated_data):
@@ -562,7 +705,7 @@ class ReviewSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "rating": {"help_text": "Rating given by the user"},
             "comment": {"help_text": "Comment provided by the user"},
-            "created_at": {"help_text": "Timestamp when the review was created"}
+            "created_at": {"help_text": "Timestamp when the review was created"},
         }
 
 
@@ -572,7 +715,7 @@ class AirlineSerializer(serializers.ModelSerializer):
         fields = ("id", "name", "country", "iata_code")
         extra_kwargs = {
             "name": {"help_text": "Name of the airline"},
-            "iata_code": {"help_text": "IATA code of the airline"}
+            "iata_code": {"help_text": "IATA code of the airline"},
         }
 
 
@@ -584,7 +727,7 @@ class RefundPolicySerializer(serializers.ModelSerializer):
             "name": {"help_text": "Name of the refund policy"},
             "refundable": {"help_text": "Indicates if the ticket is refundable"},
             "penalty_percent": {"help_text": "Percentage penalty for refund"},
-            "valid_until": {"help_text": "Duration until the refund is valid"}
+            "valid_until": {"help_text": "Duration until the refund is valid"},
         }
 
 
@@ -595,5 +738,5 @@ class NotificationSerializer(serializers.ModelSerializer):
         extra_kwargs = {
             "message": {"help_text": "Notification message"},
             "created_at": {"help_text": "Timestamp when the notification was created"},
-            "read": {"help_text": "Indicates if the notification has been read"}
+            "read": {"help_text": "Indicates if the notification has been read"},
         }

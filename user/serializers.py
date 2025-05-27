@@ -1,8 +1,20 @@
 from django.contrib.auth import get_user_model
 from rest_framework import serializers
 
-from flights.models import Country, City, Airport, Route, AirplaneType, Airplane, Crew, Flight, Order, TicketClass, \
-    Ticket
+from flights.models import (
+    Country,
+    City,
+    Airport,
+    Route,
+    AirplaneType,
+    Airplane,
+    Crew,
+    Flight,
+    Order,
+    TicketClass,
+    Ticket,
+)
+
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
