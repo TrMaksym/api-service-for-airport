@@ -1,5 +1,5 @@
 from django.conf import settings
-from django.core.validators import MinValueValidator
+from django.core.validators import MinValueValidator, MaxValueValidator
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils.timezone import now
@@ -91,6 +91,7 @@ class Flight(models.Model):
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="scheduled"
     )
+    base_price = models.DecimalField(decimal_places=2, max_digits=10, null=True, blank=True)
 
     def __str__(self):
         return f"Flight {self.id} from {self.route.source.name} to {self.route.destination.name}"
@@ -101,6 +102,10 @@ class Flight(models.Model):
 
     def save(self, *args, **kwargs):
         is_new = self.pk is None
+
+        if self.base_price is None and self.route and self.route.distance:
+            tariff_per_km = 5
+            self.base_price = self.route.distance * tariff_per_km
         super().save(*args, **kwargs)
 
         if is_new:
@@ -125,9 +130,40 @@ class Flight(models.Model):
                 )
 
 
+class TicketClass(models.Model):
+    name = models.CharField(max_length=50)
+    price_multiplier = models.DecimalField(max_digits=4, decimal_places=2, default=1.0)
+
+    def __str__(self):
+        return self.name
+
+
+class ExtraService(models.Model):
+    name = models.CharField(max_length=100)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+
+    def __str__(self):
+        return f"{self.name} (${self.price})"
+
+
+class ExtraServicePrice(models.Model):
+    extra_service = models.ForeignKey(ExtraService, on_delete=models.CASCADE)
+    ticket_class = models.ForeignKey(TicketClass, on_delete=models.CASCADE)
+    price = models.DecimalField(max_digits=10, decimal_places=2)
+    is_available = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ("extra_service", "ticket_class")
+
+    def __str__(self):
+        return f"{self.extra_service.name} for {self.ticket_class.name}"
+
+
 class Order(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    ticket_class = models.ForeignKey(TicketClass, on_delete=models.PROTECT, default=2)
+    extra_services = models.ManyToManyField(ExtraService, blank=True)
 
     def total_price(self):
         tickets_price = sum(ticket.get_price() for ticket in self.tickets.all())
@@ -136,14 +172,6 @@ class Order(models.Model):
 
     def __str__(self):
         return f"Order {self.id} by {self.user}"
-
-
-class TicketClass(models.Model):
-    name = models.CharField(max_length=50)
-    price_multiplier = models.DecimalField(max_digits=4, decimal_places=3, default=1.0)
-
-    def __str__(self):
-        return self.name
 
 
 class Ticket(models.Model):
@@ -175,6 +203,13 @@ class Ticket(models.Model):
 
     def __str__(self):
         return f"Ticket {self.id} for Seat {self.seat}"
+
+    def save(self, *args, **kwargs):
+        if self.base_price is None:
+            flight_price = self.seat.flight.base_price
+            multiplier = self.ticket_class.price_multiplier
+            self.base_price = flight_price * multiplier
+        super().save(*args, **kwargs)
 
 
 class Promotion(models.Model):
@@ -250,17 +285,6 @@ class Payment(models.Model):
         return f"Payment {self.id} for Order {self.order.id}"
 
 
-class ExtraService(models.Model):
-    order = models.ForeignKey(
-        Order, related_name="extraservices", on_delete=models.CASCADE
-    )
-    name = models.CharField(max_length=100)
-    price = models.DecimalField(max_digits=10, decimal_places=2)
-
-    def __str__(self):
-        return f"{self.name} (${self.price}) for Order {self.order.id}"
-
-
 class FlightHistory(models.Model):
     flight = models.ForeignKey(
         Flight, related_name="flight_histories", on_delete=models.CASCADE
@@ -295,7 +319,7 @@ class OrderHistory(models.Model):
 class Review(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
     flight = models.ForeignKey(Flight, on_delete=models.CASCADE)
-    rating = models.PositiveIntegerField()
+    rating = models.PositiveIntegerField(validators=[MinValueValidator(1), MaxValueValidator(5)])
     comment = models.TextField(blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
 

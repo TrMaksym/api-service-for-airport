@@ -28,7 +28,10 @@ class UserRestrictedMixin:
         return self.queryset.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        serializer.save(user=self.request.user)
+        if hasattr(serializer.Meta.model, 'user'):
+            serializer.save(user=self.request.user)
+        else:
+            serializer.save()
 
 
 class BaseModelViewSet(viewsets.ModelViewSet):
@@ -180,6 +183,9 @@ class OrderViewSet(UserRestrictedMixin, BaseModelViewSet):
         if self.action == "list":
             return OrderListSerializer
         return OrderSerializer
+
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
 
 class TicketViewSet(UserOrAdminQuerySetMixin, BaseModelViewSet):

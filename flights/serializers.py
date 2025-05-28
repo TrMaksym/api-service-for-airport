@@ -1,7 +1,6 @@
 from django.db import transaction
 from rest_framework import serializers
 from rest_framework.exceptions import ValidationError
-from rest_framework.relations import PrimaryKeyRelatedField
 from rest_framework.validators import UniqueTogetherValidator
 from flights.models import (
     TicketClass,
@@ -27,6 +26,7 @@ from flights.models import (
     RefundPolicy,
     Notification,
 )
+from user.serializers import UserSerializer
 
 
 class CountrySerializer(serializers.ModelSerializer):
@@ -37,6 +37,8 @@ class CountrySerializer(serializers.ModelSerializer):
 
 
 class CitySerializer(serializers.ModelSerializer):
+    country = CountrySerializer(read_only=True)
+
     class Meta:
         model = City
         fields = ("id", "name", "country")
@@ -345,7 +347,7 @@ class FlightSerializer(serializers.ModelSerializer):
 
 
 class FlightListSerializer(serializers.ModelSerializer):
-    route = serializers.SlugRelatedField(read_only=True, slug_field="id")
+    route = RouteSerializer(read_only=True)
     airplane = serializers.SlugRelatedField(read_only=True, slug_field="name")
     crew = serializers.SlugRelatedField(
         many=True, read_only=True, slug_field="last_name"
@@ -493,9 +495,10 @@ class TicketListSerializer(serializers.ModelSerializer):
 class TicketRetrieveSerializer(TicketSerializer):
     order = serializers.SlugRelatedField(read_only=True, slug_field="id")
     ticket_class = serializers.SlugRelatedField(read_only=True, slug_field="name")
-    flight = serializers.SlugRelatedField(
-        read_only=True, slug_field="id", source="seat.flight"
-    )
+    flight = serializers.CharField(source="seat.flight.route.__str__", read_only=True)
+    seat = serializers.CharField(source="seat.get_seat_display", read_only=True)
+    seat_number = serializers.ReadOnlyField(source="seat.seat_number")
+    row = serializers.ReadOnlyField(source="seat.row")
     status = serializers.CharField(source="get_status_display", read_only=True)
 
     class Meta:
@@ -514,42 +517,43 @@ class TicketRetrieveSerializer(TicketSerializer):
 
 
 class OrderSerializer(serializers.ModelSerializer):
-    tickets = TicketSerializer(many=True, write_only=True, required=False)
-    tickets_info = TicketRetrieveSerializer(many=True, read_only=True, source="tickets")
+    tickets_info = TicketRetrieveSerializer(many=True, read_only=True, source='tickets')
+    tickets = serializers.PrimaryKeyRelatedField(
+        many=True,
+        queryset=Ticket.objects.all(),
+        write_only=True,
+        required=False,
+    )
 
     class Meta:
         model = Order
-        fields = ("id", "created_at", "user", "tickets", "tickets_info")
-        extra_kwargs = {
-            "created_at": {"help_text": "Order creation timestamp"},
-            "user": {"help_text": "User who created the order"},
-        }
+        fields = ('id', 'created_at', 'user', 'ticket_class', 'extra_services', 'tickets', 'tickets_info')
+        read_only_fields = ('user', 'created_at')
 
     def create(self, validated_data):
-        tickets_data = validated_data.pop("tickets", [])
         with transaction.atomic():
+            tickets_data = validated_data.pop("tickets", None)
             order = Order.objects.create(**validated_data)
-            for ticket_data in tickets_data:
-                Ticket.objects.create(order=order, **ticket_data)
-        return order
+            Ticket.objects.bulk_create([
+                Ticket(order=order, **ticket)
+                for ticket in tickets_data
+            ])
+            return order
 
     def update(self, instance, validated_data):
-        tickets_data = validated_data.pop("tickets", None)
-        with transaction.atomic():
-            for attr, value in validated_data.items():
-                setattr(instance, attr, value)
-            instance.save()
-            if tickets_data is not None:
-                instance.tickets.all().delete()
-                for ticket_data in tickets_data:
-                    Ticket.objects.create(order=instance, **ticket_data)
+        tickets = validated_data.pop('tickets', None)
+
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        instance.save()
+
+        if tickets is not None:
+            instance.tickets.all().update(order=None)
+            for ticket in tickets:
+                ticket.order = instance
+                ticket.save()
+
         return instance
-
-
-class OrderListSerializer(OrderSerializer):
-    tickets_info = TicketListSerializer(many=True, read_only=True, source="tickets")
-    created_at = serializers.DateTimeField(format="%d %b %Y, %H:%M", read_only=True)
-    user = serializers.SlugRelatedField(read_only=True, slug_field="username")
 
 
 class TicketClassSerializer(serializers.ModelSerializer):
@@ -560,6 +564,24 @@ class TicketClassSerializer(serializers.ModelSerializer):
             "name": {"help_text": "Name of the ticket class (e.g., Economy, Business)"},
             "price_multiplier": {"help_text": "Price multiplier for the ticket class"},
         }
+
+
+class ExtraServiceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ExtraService
+        fields = ("id", "name", "price")
+        extra_kwargs = {
+            "name": {"help_text": "Name of the extra service"},
+            "price": {"help_text": "Price of the extra service"},
+        }
+
+
+class OrderListSerializer(OrderSerializer):
+    tickets_info = TicketRetrieveSerializer(many=True, read_only=True, source="tickets")
+    created_at = serializers.DateTimeField(format="%d %b %Y, %H:%M", read_only=True)
+    user = serializers.SlugRelatedField(slug_field="username", read_only=True)
+    ticket_class = TicketClassSerializer(read_only=True)
+    extra_services = ExtraServiceSerializer(read_only=True, many=True)
 
 
 class PromotionSerializer(serializers.ModelSerializer):
@@ -588,6 +610,7 @@ class PromotionSerializer(serializers.ModelSerializer):
 
 
 class PassengerSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
     class Meta:
         model = Passenger
         fields = ("id", "user", "phone", "passport_number")
@@ -653,6 +676,7 @@ class SeatSerializer(serializers.ModelSerializer):
 
 class PaymentSerializer(serializers.ModelSerializer):
     status = serializers.ChoiceField(choices=Payment.STATUS_CHOICES, default="pending")
+    order = OrderSerializer(read_only=True)
 
     class Meta:
         model = Payment
@@ -664,17 +688,9 @@ class PaymentSerializer(serializers.ModelSerializer):
         }
 
 
-class ExtraServiceSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = ExtraService
-        fields = ("id", "order", "name", "price")
-        extra_kwargs = {
-            "name": {"help_text": "Name of the extra service"},
-            "price": {"help_text": "Price of the extra service"},
-        }
-
-
 class FlightHistorySerializer(serializers.ModelSerializer):
+    changed_by = UserSerializer(read_only=True)
+
     class Meta:
         model = FlightHistory
         fields = ("id", "flight", "changed_at", "changed_by", "change_description")
@@ -697,6 +713,8 @@ class FlightHistorySerializer(serializers.ModelSerializer):
 
 
 class OrderHistorySerializer(serializers.ModelSerializer):
+    changed_by = UserSerializer(read_only=True)
+
     class Meta:
         model = OrderHistory
         fields = ("id", "order", "changed_at", "changed_by", "change_description")
@@ -717,17 +735,27 @@ class OrderHistorySerializer(serializers.ModelSerializer):
 
 
 class ReviewSerializer(serializers.ModelSerializer):
+    rating = serializers.IntegerField(min_value=1, max_value=5)
+    flight = FlightSerializer(read_only=True)
+    user = UserSerializer(read_only=True)
+
     class Meta:
         model = Review
         fields = ("id", "user", "flight", "rating", "comment", "created_at")
         extra_kwargs = {
-            "rating": {"help_text": "Rating given by the user"},
             "comment": {"help_text": "Comment provided by the user"},
             "created_at": {"help_text": "Timestamp when the review was created"},
         }
 
+    def validate_rating(self, value):
+        if not (1 <= value <= 5):
+            raise serializers.ValidationError("Rating must be between 1 and 5")
+        return value
+
 
 class AirlineSerializer(serializers.ModelSerializer):
+    country = CountrySerializer(read_only=True)
+
     class Meta:
         model = Airline
         fields = ("id", "name", "country", "iata_code")
@@ -750,11 +778,12 @@ class RefundPolicySerializer(serializers.ModelSerializer):
 
 
 class NotificationSerializer(serializers.ModelSerializer):
+    user = UserSerializer(read_only=True)
+
     class Meta:
         model = Notification
         fields = ("id", "user", "message", "created_at", "read")
         extra_kwargs = {
             "message": {"help_text": "Notification message"},
-            "created_at": {"help_text": "Timestamp when the notification was created"},
             "read": {"help_text": "Indicates if the notification has been read"},
         }
