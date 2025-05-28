@@ -787,3 +787,8 @@ class NotificationSerializer(serializers.ModelSerializer):
             "message": {"help_text": "Notification message"},
             "read": {"help_text": "Indicates if the notification has been read"},
         }
+
+class ItemImageSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Airplane
+        fields = ("id", "image")

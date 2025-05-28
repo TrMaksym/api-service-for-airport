@@ -1,4 +1,9 @@
-from rest_framework import viewsets
+from django.core.serializers import get_serializer
+from drf_spectacular.types import OpenApiTypes
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from rest_framework import viewsets, status
+from rest_framework.decorators import action
+from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
@@ -126,7 +131,35 @@ class AirplaneViewSet(BaseModelViewSet):
             return AirplaneListSerializer
         if self.action == "retrieve":
             return AirplaneRetrieveSerializer
+        elif self.action == "upload_image":
+            return ItemImageSerializer
         return AirplaneSerializer
+
+    @action(
+        methods=["post"],
+        detail=True,
+        permission_classes=[IsAdminUser],
+        url_path="upload-image",
+    )
+    def upload_image(self, request, pk=None):
+        airplane = self.get_object()
+        serializer = self.get_serializer(instance=airplane, data=request.data, partial=True)
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data, status=status.HTTP_200_OK)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @extend_schema(
+        parameters = [
+            OpenApiParameter(
+                name="source_city",
+                type={"type": "array", "items": {"type": "number"}},
+                description="Source city name",
+            )
+        ]
+    )
+    def list(self, request, *args, **kwargs):
+        return super().list(request, *args, **kwargs)
 
 
 class CrewViewSet(BaseModelViewSet):
