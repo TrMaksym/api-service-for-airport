@@ -139,8 +139,8 @@ class Order(models.Model):
 
 
 class TicketClass(models.Model):
-    name = models.CharField(max_length=50)  # Economy, Business тощо
-    price_multiplier = models.DecimalField(max_digits=4, decimal_places=2, default=1.0)
+    name = models.CharField(max_length=50)
+    price_multiplier = models.DecimalField(max_digits=4, decimal_places=3, default=1.0)
 
     def __str__(self):
         return self.name

@@ -1,5 +1,7 @@
 from django.db import transaction
 from rest_framework import serializers
+from rest_framework.exceptions import ValidationError
+from rest_framework.relations import PrimaryKeyRelatedField
 from rest_framework.validators import UniqueTogetherValidator
 from flights.models import (
     TicketClass,
@@ -52,10 +54,9 @@ class AirportSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Airport
-        fields = ("id", "name", "iata_code", "city", "city_id")
+        fields = ("id", "name", "city", "city_id")
         extra_kwargs = {
             "name": {"help_text": "Airport name"},
-            "iata_code": {"help_text": "IATA code of the airport"},
         }
 
 
@@ -64,10 +65,9 @@ class AirportListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Airport
-        fields = ("id", "name", "iata_code", "city")
+        fields = ("id", "name", "city")
         extra_kwargs = {
             "name": {"help_text": "Airport name"},
-            "iata_code": {"help_text": "IATA code of the airport"},
         }
 
 
@@ -76,10 +76,9 @@ class AirportRetrieveSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Airport
-        fields = ("id", "name", "iata_code", "city")
+        fields = ("id", "name", "city")
         extra_kwargs = {
             "name": {"help_text": "Airport name"},
-            "iata_code": {"help_text": "IATA code of the airport"},
         }
 
 
@@ -92,9 +91,9 @@ class AirportFilterSerializer(serializers.Serializer):
         fields = ("city", "name", "iata_code")
 
     def validate(self, data):
-        if not any(data.get(field) for field in ["city", "name", "iata_code"]):
+        if not any(data.get(field) for field in ["city", "name"]):
             raise serializers.ValidationError(
-                "At least one filter (city, name, or iata_code) must be provided."
+                "At least one filter (city, name) must be provided."
             )
         return data
 
@@ -276,19 +275,37 @@ class CrewRetrieveSerializer(serializers.ModelSerializer):
 
 
 class FlightSerializer(serializers.ModelSerializer):
-    crew = serializers.PrimaryKeyRelatedField(many=True, queryset=Crew.objects.all())
+    route = RouteSerializer(read_only=True)
+    route_id = serializers.PrimaryKeyRelatedField(
+        queryset=Route.objects.all(), source="route", write_only=True
+    )
+    airplane = AirplaneSerializer(read_only=True)
+    airplane_id = serializers.PrimaryKeyRelatedField(
+        queryset=Airplane.objects.all(), source="airplane", write_only=True
+    )
+    crew = CrewSerializer(many=True, read_only=True)
+    crew_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Crew.objects.all(), many=True, source="crew", write_only=True
+    )
+
+    country = serializers.SerializerMethodField()
 
     class Meta:
         model = Flight
         fields = (
             "id",
             "route",
+            "route_id",
             "airplane",
+            "airplane_id",
             "departure_time",
             "arrival_time",
             "crew",
+            "crew_ids",
+            "country",
             "status",
         )
+
         extra_kwargs = {
             "route": {"help_text": "Route of the flight"},
             "airplane": {"help_text": "Airplane used for the flight"},
@@ -296,6 +313,9 @@ class FlightSerializer(serializers.ModelSerializer):
             "arrival_time": {"help_text": "Arrival time of the flight"},
             "status": {"help_text": "Current status of the flight"},
         }
+
+    def get_country(self, obj):
+        return obj.route.source.city.country.country
 
     def validate(self, data):
         departure = data.get("departure_time")
@@ -444,16 +464,10 @@ class TicketSerializer(serializers.ModelSerializer):
             )
         ]
 
-    def validate(self, attrs):
-        try:
-            Ticket.validate_seat(
-                attrs["seat"],
-                attrs["order"],
-                serializers.ValidationError,
-            )
-        except serializers.ValidationError as e:
-            raise e
-        return attrs
+    def validate_seat(self, value):
+        if Ticket.objects.filter(seat=value, status__in=['reserved', 'paid']).exists():
+            raise ValidationError(f"Seat {value} is already taken.")
+        return value
 
 
 class TicketListSerializer(serializers.ModelSerializer):
@@ -584,6 +598,8 @@ class PassengerSerializer(serializers.ModelSerializer):
 
 
 class SeatSerializer(serializers.ModelSerializer):
+    flight = FlightSerializer(read_only=True)
+
     class Meta:
         model = Seat
         fields = (
@@ -605,30 +621,32 @@ class SeatSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         flight = data.get("flight")
-        row = data.get("row")
-        seat_number = data.get("seat_number")
-        is_window = data.get("is_window")
-        is_aisle = data.get("is_aisle")
+        if flight is None:
+            raise serializers.ValidationError("Flight must be specified.")
 
         airplane = flight.airplane
+
+        row = data.get("row")
+        seat_number = data.get("seat_number")
+        is_window = data.get("is_window", False)
+        is_aisle = data.get("is_aisle", False)
 
         if row > airplane.rows:
             raise serializers.ValidationError(
                 f"Row number {row} exceeds total rows in airplane ({airplane.rows})"
             )
-
         if seat_number > airplane.seats_in_row:
             raise serializers.ValidationError(
                 f"Seat number {seat_number} exceeds seats per row ({airplane.seats_in_row})"
             )
-
         if is_window and seat_number not in (1, airplane.seats_in_row):
             raise serializers.ValidationError(
                 "Only first or last seats in a row can be window seats."
             )
-
         if is_aisle and seat_number in (1, airplane.seats_in_row):
-            raise serializers.ValidationError("Window seats cannot be aisle seats.")
+            raise serializers.ValidationError(
+                "Window seats cannot be aisle seats."
+            )
 
         return data
 
