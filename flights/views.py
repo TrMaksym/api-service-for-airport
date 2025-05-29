@@ -33,7 +33,7 @@ class UserRestrictedMixin:
         return self.queryset.filter(user=self.request.user)
 
     def perform_create(self, serializer):
-        if hasattr(serializer.Meta.model, 'user'):
+        if hasattr(serializer.Meta.model, "user"):
             serializer.save(user=self.request.user)
         else:
             serializer.save()
@@ -121,6 +121,7 @@ class RouteFilterView(APIView):
 class AirplaneTypeViewSet(viewsets.ModelViewSet):
     queryset = AirplaneType.objects.all()
     serializer_class = AirplaneTypeSerializer
+    permission_classes = [IsAdminOrIfAuthenticated]
 
 
 class AirplaneViewSet(BaseModelViewSet):
@@ -132,7 +133,7 @@ class AirplaneViewSet(BaseModelViewSet):
         if self.action == "retrieve":
             return AirplaneRetrieveSerializer
         elif self.action == "upload_image":
-            return ItemImageSerializer
+            return Ite
         return AirplaneSerializer
 
     @action(
@@ -143,14 +144,16 @@ class AirplaneViewSet(BaseModelViewSet):
     )
     def upload_image(self, request, pk=None):
         airplane = self.get_object()
-        serializer = self.get_serializer(instance=airplane, data=request.data, partial=True)
+        serializer = self.get_serializer(
+            instance=airplane, data=request.data, partial=True
+        )
         if serializer.is_valid():
             serializer.save()
             return Response(serializer.data, status=status.HTTP_200_OK)
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
     @extend_schema(
-        parameters = [
+        parameters=[
             OpenApiParameter(
                 name="source_city",
                 type={"type": "array", "items": {"type": "number"}},
@@ -217,6 +220,9 @@ class OrderViewSet(UserRestrictedMixin, BaseModelViewSet):
             return OrderListSerializer
         return OrderSerializer
 
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user)
+
     def perform_create(self, serializer):
         serializer.save(user=self.request.user)
 
@@ -231,6 +237,9 @@ class TicketViewSet(UserOrAdminQuerySetMixin, BaseModelViewSet):
         if self.action == "retrieve":
             return TicketRetrieveSerializer
         return TicketSerializer
+
+    def get_queryset(self):
+        return Ticket.objects.filter(order__user=self.request.user)
 
 
 class TicketClassViewSet(BaseModelViewSet):
@@ -248,15 +257,45 @@ class PassengerViewSet(UserRestrictedMixin, BaseModelViewSet):
     serializer_class = PassengerSerializer
 
 
-class SeatViewSet(BaseModelViewSet):
+class SeatViewSet(viewsets.ModelViewSet):
     queryset = Seat.objects.all()
     serializer_class = SeatSerializer
+
+    @action(detail=False, methods=["get"])
+    def available(self, request, flight):
+        flight_id = request.query_params.get("flight")
+        is_window = request.query_params.get("is_window")
+        is_aisle = request.query_params.get("is_aisle")
+        is_available = request.query_params.get("is_available")
+
+        seats = Seat.objects.all()
+
+        if flight_id:
+            seats = seats.filter(flight_id=flight_id)
+        if is_window is not None:
+            seats = seats.filter(is_window=is_window.lower() == "true")
+        if is_aisle is not None:
+            seats = seats.filter(is_aisle=is_aisle.lower() == "true")
+        if is_available is not None:
+            seats = seats.filter(is_available=is_available.lower() == "true")
+
+        occupied_seats_ids = Ticket.objects.filter(
+            status__in=["reserved", "paid"]
+        ).values_list("seat_id", flat=True)
+
+        seats = seats.exclude(id__in=occupied_seats_ids)
+
+        serializer = self.get_serializer(seats, many=True)
+        return Response(serializer.data)
 
 
 class PaymentViewSet(UserOrAdminQuerySetMixin, BaseModelViewSet):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
     user_filter = {"order__user": "self.request.user"}
+
+    def get_queryset(self):
+        return Order.objects.filter(user=self.request.user)
 
 
 class ExtraServiceViewSet(UserOrAdminQuerySetMixin, BaseModelViewSet):
@@ -274,6 +313,9 @@ class OrderHistoryViewSet(UserOrAdminQuerySetMixin, BaseModelViewSet):
     queryset = OrderHistory.objects.all()
     serializer_class = OrderHistorySerializer
     user_filter = {"order__user": "self.request.user"}
+
+    def get_queryset(self):
+        return OrderHistory.objects.filter(order__user=self.request.user)
 
 
 class ReviewViewSet(UserOrAdminQuerySetMixin, BaseModelViewSet):
