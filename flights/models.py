@@ -75,7 +75,7 @@ class Airplane(models.Model):
     rows = models.PositiveIntegerField()
     seats_in_row = models.PositiveIntegerField()
     airplane_type = models.ForeignKey(AirplaneType, on_delete=models.CASCADE)
-    image = models.ImageField(null=True, upload_to="images/a")
+    image = models.ImageField(null=True, upload_to=image_path)
 
     def __str__(self):
         return self.name
@@ -97,15 +97,17 @@ class Flight(models.Model):
         ("in_air", "In Air"),
     ]
 
-    route = models.ForeignKey('Route', on_delete=models.CASCADE, null=False)
-    airplane = models.ForeignKey('Airplane', on_delete=models.CASCADE)
+    route = models.ForeignKey("Route", on_delete=models.CASCADE, null=False)
+    airplane = models.ForeignKey("Airplane", on_delete=models.CASCADE)
     departure_time = models.DateTimeField()
     arrival_time = models.DateTimeField()
-    crew = models.ManyToManyField('Crew')
+    crew = models.ManyToManyField("Crew")
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="scheduled"
     )
-    base_price = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal("100.00"))
+    base_price = models.DecimalField(
+        max_digits=10, decimal_places=2, default=Decimal("100.00")
+    )
 
     def __str__(self):
         return f"Flight {self.id} from {self.route.source.name} to {self.route.destination.name}"
@@ -127,7 +129,9 @@ class Flight(models.Model):
                 tariff_per_km = Decimal("5")
                 self.base_price = Decimal(self.route.distance) * tariff_per_km
             else:
-                raise ValidationError("Cannot calculate base price: route or distance is missing")
+                raise ValidationError(
+                    "Cannot calculate base price: route or distance is missing"
+                )
 
         super().save(*args, **kwargs)
 
@@ -144,20 +148,22 @@ class Flight(models.Model):
             print(f"Creating {rows * seats_in_row} seats for Flight {self.id}")
             for row in range(1, rows + 1):
                 for seat_number in range(1, seats_in_row + 1):
+                    is_window = seat_number in [1, seats_in_row]
+                    if seats_in_row == 6:
+                        is_aisle = seat_number in [3, 4]
+                    elif seats_in_row == 4:  # Для схеми 2+2
+                        is_aisle = seat_number in [2, 3]
+                    else:
+                        is_aisle = False
+
                     Seat.objects.create(
                         flight=self,
                         row=row,
                         seat_number=seat_number,
-                        is_window=seat_number in [1, seats_in_row],
-                        is_aisle=(
-                            seat_number in [2, seats_in_row - 1]
-                            if seats_in_row >= 4
-                            else False
-                        ),
-                        is_available=True
+                        is_window=is_window,
+                        is_aisle=is_aisle,
+                        is_available=True,
                     )
-        else:
-            print(f"Seats already exist for Flight {self.id}: {existing_seats} seats")
 
 
 class TicketClass(models.Model):
@@ -220,8 +226,8 @@ class Ticket(models.Model):
     ]
 
     seat = models.OneToOneField("Seat", on_delete=models.PROTECT)
-    order = models.ForeignKey('Order', related_name="tickets", on_delete=models.CASCADE)
-    ticket_class = models.ForeignKey('TicketClass', on_delete=models.PROTECT)
+    order = models.ForeignKey("Order", related_name="tickets", on_delete=models.CASCADE)
+    ticket_class = models.ForeignKey("TicketClass", on_delete=models.PROTECT)
     base_price = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(
         max_length=20, choices=STATUS_CHOICES, default="available"
@@ -247,11 +253,15 @@ class Ticket(models.Model):
     def save(self, *args, **kwargs):
         if self.base_price is None:
             flight_price = getattr(self.seat.flight, "base_price", None)
-            multiplier = getattr(self.ticket_class, "price_multiplier", Decimal("1")) or Decimal("1")
+            multiplier = getattr(
+                self.ticket_class, "price_multiplier", Decimal("1")
+            ) or Decimal("1")
 
             if flight_price is None:
                 if self.seat.flight.route and self.seat.flight.route.distance:
-                    flight_price = Decimal(self.seat.flight.route.distance) * Decimal("5")
+                    flight_price = Decimal(self.seat.flight.route.distance) * Decimal(
+                        "5"
+                    )
                 else:
                     flight_price = Decimal("100.00")
 
@@ -284,7 +294,7 @@ class Passenger(models.Model):
 
 
 class Seat(models.Model):
-    flight = models.ForeignKey('Flight', on_delete=models.CASCADE)
+    flight = models.ForeignKey("Flight", on_delete=models.CASCADE)
     row = models.PositiveIntegerField()
     seat_number = models.PositiveIntegerField()
     is_window = models.BooleanField(default=False)
@@ -305,9 +315,22 @@ class Seat(models.Model):
                 f"Seat number {self.seat_number} exceeds seats per row ({airplane.seats_in_row})"
             )
         if self.is_window and self.seat_number not in (1, airplane.seats_in_row):
-            raise ValidationError(f"Seat number {self.seat_number} is invalid for window seat")
-        if self.is_aisle and self.seat_number not in [1, airplane.seats_in_row]:
-            raise ValidationError(f"Seat number {self.seat_number} is invalid for aisle seat")
+            raise ValidationError(
+                f"Seat number {self.seat_number} is invalid for window seat"
+            )
+        if self.is_aisle:
+            if airplane.seats_in_row == 6 and self.seat_number not in [3, 4]:
+                raise ValidationError(
+                    f"Seat number {self.seat_number} is invalid for aisle seat"
+                )
+            elif airplane.seats_in_row == 4 and self.seat_number not in [2, 3]:
+                raise ValidationError(
+                    f"Seat number {self.seat_number} is invalid for aisle seat"
+                )
+            elif airplane.seats_in_row < 4:
+                raise ValidationError(
+                    "Aisle seats are not available for planes with less than 4 seats per row"
+                )
 
     def save(self, *args, **kwargs):
         self.clean()

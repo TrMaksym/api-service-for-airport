@@ -30,7 +30,9 @@ from flights.models import (
 from user.serializers import UserSerializer
 
 
-def validate_source_destination(source, destination, source_field="source", destination_field="destination"):
+def validate_source_destination(
+    source, destination, source_field="source", destination_field="destination"
+):
     if source == destination:
         raise serializers.ValidationError(
             f"{source_field.capitalize()} and {destination_field.capitalize()} must be different."
@@ -46,15 +48,18 @@ class CountrySerializer(serializers.ModelSerializer):
 
 
 class CitySerializer(serializers.ModelSerializer):
-    country = CountrySerializer(read_only=True)
+    country_name = serializers.SlugRelatedField(
+        source='country',
+        read_only=True,
+        slug_field="country",
+    )
+    country = serializers.PrimaryKeyRelatedField(
+        queryset=Country.objects.all()
+    )
 
     class Meta:
         model = City
-        fields = ("id", "name", "country")
-        extra_kwargs = {
-            "name": {"help_text": "Name of the city"},
-            "country": {"help_text": "Country where the city is located"},
-        }
+        fields = ['id', 'name', 'country', 'country_name']
 
 
 class AirportSerializer(serializers.ModelSerializer):
@@ -137,7 +142,9 @@ class RouteSerializer(serializers.ModelSerializer):
         }
 
     def validate(self, data):
-        print(f"Validating Route: source={data.get('source')}, destination={data.get('destination')}")
+        print(
+            f"Validating Route: source={data.get('source')}, destination={data.get('destination')}"
+        )
         validate_source_destination(data.get("source"), data.get("destination"))
         return data
 
@@ -190,7 +197,7 @@ class RouteFilterSerializer(serializers.Serializer):
             data.get("source_city"),
             data.get("destination_city"),
             source_field="source_city",
-            destination_field="destination_city"
+            destination_field="destination_city",
         )
         return data
 
@@ -313,6 +320,7 @@ class FlightSerializer(serializers.ModelSerializer):
             "crew_ids",
             "country",
             "status",
+            "base_price"
         )
         read_only_fields = ["id", "country"]
         extra_kwargs = {
@@ -456,7 +464,7 @@ class FlightFilterSerializer(serializers.Serializer):
             data.get("source_city"),
             data.get("destination_city"),
             source_field="source_city",
-            destination_field="destination_city"
+            destination_field="destination_city",
         )
         return data
 
@@ -494,9 +502,7 @@ class TicketSerializer(serializers.ModelSerializer):
 
     def validate_seat(self, value):
         print(f"Validating seat {value} for ticket")
-        if Ticket.objects.filter(
-            seat=value, status__in=["reserved", "paid"]
-        ).exists():
+        if Ticket.objects.filter(seat=value, status__in=["reserved", "paid"]).exists():
             raise serializers.ValidationError(f"Seat {value} is already taken.")
         return value
 
@@ -507,7 +513,8 @@ class TicketSerializer(serializers.ModelSerializer):
         print(f"Creating ticket for order {order.id}, seat {validated_data['seat']}")
         validated_data["order"] = order
         validated_data["base_price"] = (
-            validated_data["seat"].flight.base_price * validated_data["ticket_class"].price_multiplier
+            validated_data["seat"].flight.base_price
+            * validated_data["ticket_class"].price_multiplier
         )
         validated_data["status"] = "reserved"
         return super().create(validated_data)
@@ -556,12 +563,25 @@ class TicketRetrieveSerializer(TicketSerializer):
             "status",
             "flight",
         )
-        read_only_fields = ("id", "order", "seat", "seat_number", "row", "base_price", "status", "flight")
+        read_only_fields = (
+            "id",
+            "order",
+            "seat",
+            "seat_number",
+            "row",
+            "base_price",
+            "status",
+            "flight",
+        )
 
 
 class OrderSerializer(serializers.ModelSerializer):
-    flight = serializers.PrimaryKeyRelatedField(queryset=Flight.objects.all(), write_only=True)
-    ticket_class = serializers.PrimaryKeyRelatedField(queryset=TicketClass.objects.all())
+    flight = serializers.PrimaryKeyRelatedField(
+        queryset=Flight.objects.all(), write_only=True
+    )
+    ticket_class = serializers.PrimaryKeyRelatedField(
+        queryset=TicketClass.objects.all()
+    )
     extra_services = serializers.PrimaryKeyRelatedField(
         many=True, queryset=ExtraService.objects.all(), required=False
     )
@@ -571,14 +591,22 @@ class OrderSerializer(serializers.ModelSerializer):
         write_only=True,
         required=False,
         allow_empty=True,
-        help_text="List of seat IDs to reserve"
+        help_text="List of seat IDs to reserve",
     )
     user = serializers.SlugRelatedField(slug_field="username", read_only=True)
     tickets = TicketSerializer(many=True, read_only=True)
 
     class Meta:
         model = Order
-        fields = ["id", "user", "ticket_class", "extra_services", "flight", "seat_ids", "tickets"]
+        fields = [
+            "id",
+            "user",
+            "ticket_class",
+            "extra_services",
+            "flight",
+            "seat_ids",
+            "tickets",
+        ]
         read_only_fields = ["id", "user", "tickets"]
         extra_kwargs = {
             "ticket_class": {"help_text": "Class of the ticket (e.g., Economy)"},
@@ -600,9 +628,13 @@ class OrderSerializer(serializers.ModelSerializer):
 
         if seat_ids:
             seat_ids_list = [seat.id for seat in seat_ids]
-            seats = Seat.objects.filter(id__in=seat_ids_list, flight=flight, is_available=True)
+            seats = Seat.objects.filter(
+                id__in=seat_ids_list, flight=flight, is_available=True
+            )
             if seats.count() != len(seat_ids):
-                invalid_seats = set(seat_ids_list) - set(seats.values_list("id", flat=True))
+                invalid_seats = set(seat_ids_list) - set(
+                    seats.values_list("id", flat=True)
+                )
                 raise serializers.ValidationError(
                     f"Invalid or unavailable seat IDs: {invalid_seats}"
                 )
@@ -629,7 +661,9 @@ class OrderSerializer(serializers.ModelSerializer):
         extra_services = validated_data.pop("extra_services", [])
         validated_data.pop("user", None)
 
-        print(f"Creating order for user {user}, flight {flight.id}, seats={[seat.id for seat in seat_ids]}")
+        print(
+            f"Creating order for user {user}, flight {flight.id}, seats={[seat.id for seat in seat_ids]}"
+        )
         with transaction.atomic():
             order = Order.objects.create(user=user, **validated_data)
             order.extra_services.set(extra_services)
@@ -640,17 +674,28 @@ class OrderSerializer(serializers.ModelSerializer):
                     id__in=seat_ids_list, flight=flight, is_available=True
                 ).select_for_update()
                 if seats_to_reserve.count() != len(seat_ids):
-                    raise serializers.ValidationError("Some seats are no longer available")
+                    raise serializers.ValidationError(
+                        "Some seats are no longer available"
+                    )
             else:
-                seats_to_reserve = Seat.objects.filter(flight=flight, is_available=True).select_for_update()[:1]
+                seats_to_reserve = Seat.objects.filter(
+                    flight=flight, is_available=True
+                ).select_for_update()[:1]
                 if not seats_to_reserve:
-                    raise serializers.ValidationError("No available seats on this flight")
+                    raise serializers.ValidationError(
+                        "No available seats on this flight"
+                    )
 
             for seat in seats_to_reserve:
-                if not seat.is_available or Ticket.objects.filter(
-                    seat=seat, status__in=["reserved", "paid"]
-                ).exists():
-                    raise serializers.ValidationError(f"Seat {seat.id} is no longer available")
+                if (
+                    not seat.is_available
+                    or Ticket.objects.filter(
+                        seat=seat, status__in=["reserved", "paid"]
+                    ).exists()
+                ):
+                    raise serializers.ValidationError(
+                        f"Seat {seat.id} is no longer available"
+                    )
                 seat.is_available = False
                 seat.save()
                 print(f"Reserving seat {seat.id} for order {order.id}")
@@ -659,7 +704,7 @@ class OrderSerializer(serializers.ModelSerializer):
                     seat=seat,
                     ticket_class=order.ticket_class,
                     base_price=seat.flight.base_price,
-                    status="reserved"
+                    status="reserved",
                 )
 
             return order
@@ -670,7 +715,9 @@ class OrderSerializer(serializers.ModelSerializer):
         seat_ids = validated_data.pop("seat_ids", None)
         validated_data.pop("user", None)
 
-        instance.ticket_class = validated_data.get("ticket_class", instance.ticket_class)
+        instance.ticket_class = validated_data.get(
+            "ticket_class", instance.ticket_class
+        )
         instance.extra_services.set(extra_services_data)
         instance.save()
 
@@ -687,10 +734,15 @@ class OrderSerializer(serializers.ModelSerializer):
 
             for seat in seat_ids:
                 if seat.id not in current_seat_ids:
-                    if not seat.is_available or Ticket.objects.filter(
-                        seat=seat, status__in=["reserved", "paid"]
-                    ).exists():
-                        raise serializers.ValidationError(f"Seat {seat.id} is not available")
+                    if (
+                        not seat.is_available
+                        or Ticket.objects.filter(
+                            seat=seat, status__in=["reserved", "paid"]
+                        ).exists()
+                    ):
+                        raise serializers.ValidationError(
+                            f"Seat {seat.id} is not available"
+                        )
                     seat.is_available = False
                     seat.save()
                     Ticket.objects.create(
@@ -698,7 +750,7 @@ class OrderSerializer(serializers.ModelSerializer):
                         seat=seat,
                         ticket_class=instance.ticket_class,
                         base_price=seat.flight.base_price,
-                        status="reserved"
+                        status="reserved",
                     )
 
         return instance
@@ -725,7 +777,7 @@ class ExtraServiceSerializer(serializers.ModelSerializer):
 
 
 class OrderListSerializer(OrderSerializer):
-    tickets_info = TicketRetrieveSerializer(many=True, read_only=True, source="tickets")
+    tickets = TicketRetrieveSerializer(many=True, read_only=True)
     created_at = serializers.DateTimeField(format="%d %b %Y, %H:%M", read_only=True)
     user = serializers.SlugRelatedField(slug_field="username", read_only=True)
     ticket_class = TicketClassSerializer(read_only=True)
@@ -733,13 +785,13 @@ class OrderListSerializer(OrderSerializer):
 
     class Meta(OrderSerializer.Meta):
         fields = OrderSerializer.Meta.fields + [
-            "tickets_info",
+            "tickets",
             "user",
             "created_at",
             "ticket_class",
             "extra_services",
         ]
-        read_only_fields = ["id", "user", "tickets", "tickets_info", "created_at"]
+        read_only_fields = ["id", "user", "tickets", "created_at"]
 
 
 class PromotionSerializer(serializers.ModelSerializer):
@@ -849,17 +901,22 @@ class SeatSerializer(serializers.ModelSerializer):
 
 class PaymentSerializer(serializers.ModelSerializer):
     status = serializers.ChoiceField(choices=Payment.STATUS_CHOICES, default="pending")
-    order = OrderSerializer(read_only=True)
+    order = serializers.PrimaryKeyRelatedField(queryset=Order.objects.all())
 
     class Meta:
         model = Payment
-        fields = ("id", "order", "amount", "payment_date", "status")
+        fields = ("id", "order", "payment_date", "status", "amount")
         read_only_fields = ("id", "order")
         extra_kwargs = {
-            "amount": {"help_text": "Payment amount"},
             "payment_date": {"help_text": "Date of the payment"},
             "status": {"help_text": "Payment status (e.g., Pending, Successful)"},
         }
+
+    def create(self, validated_data):
+        order = validated_data.pop("order")
+        validated_data["amount"] = order.total_price()
+        payment = Payment.objects.create(order=order, **validated_data)
+        return payment
 
 
 class FlightHistorySerializer(serializers.ModelSerializer):

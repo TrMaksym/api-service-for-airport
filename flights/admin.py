@@ -30,15 +30,18 @@ class AirportAdmin(admin.ModelAdmin):
     list_display = ("name", "city")
     search_fields = ("name", "city__name")
 
+
 @admin.register(Route)
 class RouteAdmin(admin.ModelAdmin):
     list_display = ("source", "destination", "distance")
     search_fields = ("source__name", "destination__name")
 
+
 @admin.register(Airplane)
 class AirplaneAdmin(admin.ModelAdmin):
     list_display = ("name", "airplane_type")
     search_fields = ("name",)
+
 
 @admin.register(Flight)
 class FlightAdmin(admin.ModelAdmin):

@@ -3,7 +3,8 @@ from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import extend_schema, OpenApiParameter
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAdminUser
+from rest_framework.generics import get_object_or_404
+from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.viewsets import ModelViewSet
@@ -133,7 +134,7 @@ class AirplaneViewSet(BaseModelViewSet):
         if self.action == "retrieve":
             return AirplaneRetrieveSerializer
         elif self.action == "upload_image":
-            return Ite
+            return image_path
         return AirplaneSerializer
 
     @action(
@@ -178,6 +179,7 @@ class CrewViewSet(BaseModelViewSet):
 
 class FlightViewSet(BaseModelViewSet):
     queryset = Flight.objects.all()
+    permission_classes = [IsAdminOrIfAuthenticated]
 
     def get_serializer_class(self):
         if self.action == "list":
@@ -228,6 +230,7 @@ class OrderViewSet(UserRestrictedMixin, BaseModelViewSet):
 
 
 class TicketViewSet(UserOrAdminQuerySetMixin, BaseModelViewSet):
+    permission_classes = [IsAuthenticated]
     queryset = Ticket.objects.all()
     user_filter = {"order__user": "self.request.user"}
 
@@ -240,6 +243,14 @@ class TicketViewSet(UserOrAdminQuerySetMixin, BaseModelViewSet):
 
     def get_queryset(self):
         return Ticket.objects.filter(order__user=self.request.user)
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        order_id = self.request.data.get("order") or self.request.data.get("order_id")
+        if order_id:
+            order = get_object_or_404(Order, pk=order_id)
+            context["order"] = order
+        return context
 
 
 class TicketClassViewSet(BaseModelViewSet):
@@ -295,7 +306,7 @@ class PaymentViewSet(UserOrAdminQuerySetMixin, BaseModelViewSet):
     user_filter = {"order__user": "self.request.user"}
 
     def get_queryset(self):
-        return Order.objects.filter(user=self.request.user)
+        return Payment.objects.filter(order__user=self.request.user)
 
 
 class ExtraServiceViewSet(UserOrAdminQuerySetMixin, BaseModelViewSet):
